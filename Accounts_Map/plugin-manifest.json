@@ -1,3 +1,10 @@
 {
-  "service": "CRM"
+  "service": "CRM",
+  "cspDomains": {
+  "script-src":  ["https://maps.googleapis.com"],
+  "connect-src": ["https://maps.googleapis.com", "https://maps.gstatic.com"],
+  "img-src":     ["https://maps.googleapis.com", "https://maps.gstatic.com", "https://*.googleapis.com", "https://*.gstatic.com"],
+  "font-src":    ["https://fonts.gstatic.com"],
+  "style-src":   ["https://fonts.googleapis.com"]
+}
 }
