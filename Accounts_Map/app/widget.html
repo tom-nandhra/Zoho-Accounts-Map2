@@ -37,10 +37,20 @@ async function fetchAccounts(){
   return out.filter(a => a[FIELD_LAT]!=null && a[FIELD_LAT]!=="" && a[FIELD_LNG]!=null && a[FIELD_LNG]!=="");
 }
 
+function fmtMoney(v){
+  const n = Number(v);
+  return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB");
+}
+
 function infoHtml(a){
-  const d = a[FIELD_DESC] ? `<div style="margin-top:4px">${esc(a[FIELD_DESC])}</div>` : "";
+  const rows = [];
+  if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
+    rows.push(`<div>Total Revenue: <b>${fmtMoney(a[FIELD_REVENUE])}</b></div>`);
+  if (a[FIELD_WINLOSS] != null && a[FIELD_WINLOSS] !== "")
+    rows.push(`<div>Win/Loss Ratio: <b>${esc(String(a[FIELD_WINLOSS]))}%</b></div>`);
   return `<div style="font:13px/1.45 system-ui,sans-serif;max-width:280px">`
-       + `<div style="font-weight:600;font-size:14px">${esc(a.Account_Name||"")}</div>${d}</div>`;
+       + `<div style="font-weight:600;font-size:14px">${esc(a[FIELD_NAME] || "")}</div>`
+       + rows.join("") + `</div>`;
 }
 
 async function initMap(){
