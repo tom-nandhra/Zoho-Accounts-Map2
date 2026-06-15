@@ -1,10 +1,21 @@
 {
+  "locale": ["en"],
   "service": "CRM",
+  "modules": {
+    "widgets": [
+      {
+        "location": "crm.webtab",
+        "url": "/app/widget.html",
+        "name": "Account Map"
+      }
+    ]
+  },
   "cspDomains": {
-  "script-src":  ["https://maps.googleapis.com"],
-  "connect-src": ["https://maps.googleapis.com", "https://maps.gstatic.com"],
-  "img-src":     ["https://maps.googleapis.com", "https://maps.gstatic.com", "https://*.googleapis.com", "https://*.gstatic.com"],
-  "font-src":    ["https://fonts.gstatic.com"],
-  "style-src":   ["https://fonts.googleapis.com"]
-}
+    "connect-src": ["https://maps.googleapis.com", "https://maps.gstatic.com"],
+    "script-src":  ["https://maps.googleapis.com"],
+    "img-src":     ["https://maps.googleapis.com", "https://maps.gstatic.com", "https://*.googleapis.com", "https://*.gstatic.com"],
+    "font-src":    ["https://fonts.gstatic.com"],
+    "style-src":   ["https://fonts.googleapis.com"]
+  },
+  "config": []
 }
