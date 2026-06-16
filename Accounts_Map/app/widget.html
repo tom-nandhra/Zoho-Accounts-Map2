@@ -6,13 +6,21 @@
 <title>Account map</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<!-- Zoho embedded app SDK -->
 <script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
 <style>
-  html,body{height:100%;margin:0}
-  #map{height:100%}
-  #status{position:absolute;top:8px;left:8px;z-index:1000;background:#fff;border:1px solid #ccc;
-          border-radius:6px;padding:6px 10px;font:13px/1.4 system-ui,sans-serif;max-width:90vw}
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,sans-serif}
+  .wrap{display:flex;height:100%}
+  .sidebar{width:300px;flex-shrink:0;background:#f7f8fa;border-right:1px solid #e2e6ee;overflow-y:auto;padding:16px;box-sizing:border-box}
+  .sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#444;margin:0 0 4px}
+  .count{font-size:12px;color:#555;margin:0 0 14px}
+  .count b{color:#1a1a2e}
+  .fg{margin-bottom:10px}
+  .fg label{display:block;font-size:11px;font-weight:600;color:#666;margin-bottom:3px}
+  .fg select{width:100%;padding:6px 8px;border:1px solid #cdd3df;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box}
+  #reset{width:100%;margin-top:8px;padding:8px;border:1px solid #cdd3df;border-radius:6px;background:#eef1f7;font-weight:600;cursor:pointer}
+  #reset:hover{background:#e2e7f1}
+  #map{flex:1;height:100%}
+  #status{position:absolute;top:8px;left:316px;z-index:1000;background:#fff;border:1px solid #ccc;border-radius:6px;padding:6px 10px;font-size:13px;max-width:60vw}
   #status.err{background:#fdecea;border-color:#c62828;color:#7a1c1c}
   .popup-inner{font:13px/1.45 system-ui,sans-serif;min-width:180px}
   .popup-inner h4{margin:0 0 4px;font-size:14px;color:#1a1a2e}
@@ -20,25 +28,55 @@
 </style>
 </head>
 <body>
+<div class="wrap">
+  <div class="sidebar">
+    <h2>Filters</h2>
+    <div class="count">Showing <b id="count">0</b> accounts</div>
+    <div id="filters"></div>
+    <button id="reset">Reset filters</button>
+  </div>
+  <div id="map"></div>
+</div>
 <div id="status">Starting…</div>
-<div id="map"></div>
 <script>
 // ---- config: set these to your field API names -----------------------
 const FIELD_LAT     = "Billing_Latitude";
 const FIELD_LNG     = "Billing_Longitude";
+const FIELD_CODE    = "Billing_Code";
 const FIELD_NAME    = "Account_Name";
-const FIELD_COLOR   = "Account_Strength";     // the Very Low..Very High picklist
+const FIELD_COLOR   = "Account_Strength";     // <-- your Very Low..Very High field
 const FIELD_REVENUE = "Total_Business";
 const FIELD_WINLOSS = "Win_Loss_Percentage";
 
 const COLORS = {
-  "Very Low":  "#2e7d32",
-  "Low":       "#7cb342",
-  "Moderate":  "#f9a825",
-  "High":      "#ef6c00",
-  "Very High": "#c62828",
-  "_default":  "#9e9e9e"
+  "Very Low":"#2e7d32","Low":"#7cb342","Moderate":"#f9a825",
+  "High":"#ef6c00","Very High":"#c62828","_default":"#9e9e9e"
 };
+
+// Filter definitions. Bands are editable — adjust to your data.
+const FILTERS = [
+  { id:"f-industry", label:"Industry",        field:"Industry",       type:"category" },
+  { id:"f-type",     label:"Account Type",    field:"Account_Type",   type:"category" },
+  { id:"f-annrev",   label:"Annual Revenue",  field:"Annual_Revenue", type:"range", bands:[
+      {label:"< £100k", min:-Infinity, max:100000}, {label:"£100k – £500k", min:100000, max:500000},
+      {label:"£500k – £1M", min:500000, max:1000000}, {label:"£1M – £5M", min:1000000, max:5000000},
+      {label:"£5M+", min:5000000, max:Infinity} ] },
+  { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", bands:[
+      {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
+      {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
+      {label:"500+", min:501, max:Infinity} ] },
+  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
+      {label:"< £10k", min:-Infinity, max:10000}, {label:"£10k – £50k", min:10000, max:50000},
+      {label:"£50k – £250k", min:50000, max:250000}, {label:"£250k – £1M", min:250000, max:1000000},
+      {label:"£1M+", min:1000000, max:Infinity} ] },
+  { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
+      {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
+      {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
+      {label:"81 – 100%", min:81, max:Infinity} ] },
+];
 // ----------------------------------------------------------------------
 
 const statusEl = document.getElementById("status");
@@ -47,19 +85,20 @@ function hideStatus(){ statusEl.style.display = "none"; }
 
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function fmtMoney(v){ const n = Number(v); return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB"); }
+function valNum(v){ const n = Number(v); return isNaN(n) ? null : n; }
 
-function fmtMoney(v){
-  const n = Number(v);
-  return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB");
+function colorFor(v){
+  const key = String(v == null ? "" : v).trim().toLowerCase();
+  const m = Object.keys(COLORS).find(k => k.toLowerCase() === key);
+  return m ? COLORS[m] : COLORS._default;
 }
 
-// Coloured teardrop pin as a Leaflet divIcon (same technique the IFG map uses)
 function pinIcon(color){
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">`
-    + `<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z" `
-    + `fill="${color}" stroke="#fff" stroke-width="1.5"/>`
+    + `<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>`
     + `<circle cx="12" cy="12" r="5" fill="#fff" opacity="0.9"/></svg>`;
-  return L.divIcon({ html: svg, className: "", iconSize: [24,36], iconAnchor: [12,36], popupAnchor: [0,-36] });
+  return L.divIcon({ html: svg, className: "", iconSize:[24,36], iconAnchor:[12,36], popupAnchor:[0,-36] });
 }
 
 function popupHtml(a){
@@ -71,56 +110,132 @@ function popupHtml(a){
   return `<div class="popup-inner"><h4>${esc(a[FIELD_NAME])}</h4>${rows.join("")}</div>`;
 }
 
-// ---- Leaflet map + free keyless tiles --------------------------------
+// ---- build the filter controls ---------------------------------------
+function buildSidebar(){
+  document.getElementById("filters").innerHTML = FILTERS.map(f => {
+    let opts = '<option value="">All</option>';
+    if(f.type === "count")
+      opts += [0,1,2,3,4].map(n => `<option value="${n}">${n}</option>`).join("") + `<option value="5+">5+</option>`;
+    else if(f.type === "range")
+      opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join("");
+    return `<div class="fg"><label for="${f.id}">${f.label}</label><select id="${f.id}">${opts}</select></div>`;
+  }).join("");
+  FILTERS.forEach(f => document.getElementById(f.id).addEventListener("change", applyFilters));
+  document.getElementById("reset").addEventListener("click", () => {
+    FILTERS.forEach(f => document.getElementById(f.id).value = "");
+    applyFilters();
+  });
+}
+function fillCategories(accounts){
+  FILTERS.filter(f => f.type === "category").forEach(f => {
+    const vals = [...new Set(accounts.map(a => String(a[f.field]==null?"":a[f.field]).trim()).filter(Boolean))].sort();
+    document.getElementById(f.id).insertAdjacentHTML("beforeend",
+      vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(""));
+  });
+}
+
+// ---- filter matching -------------------------------------------------
+function matches(a){
+  for(const f of FILTERS){
+    const sel = document.getElementById(f.id).value;
+    if(sel === "") continue;
+    const raw = a[f.field];
+    if(f.type === "category"){
+      if(String(raw==null?"":raw).trim() !== sel) return false;
+    } else if(f.type === "count"){
+      const n = valNum(raw) ?? 0;
+      if(sel === "5+"){ if(!(n >= 5)) return false; }
+      else if(n !== Number(sel)) return false;
+    } else if(f.type === "range"){
+      const n = valNum(raw);
+      if(n === null) return false;
+      const b = f.bands[Number(sel)];
+      if(!(n >= b.min && n < b.max)) return false;
+    }
+  }
+  return true;
+}
+
+// ---- Leaflet map -----------------------------------------------------
 const map = L.map("map", { center:[51.13,-0.1], zoom:6 });
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
+  attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
 }).addTo(map);
+const markerLayer = L.layerGroup().addTo(map);
 
-// ---- fetch Accounts via the Zoho SDK ---------------------------------
+// ---- postcode geocoding fallback (postcodes.io, UK) ------------------
+const geoCache = {};
+const normPC = pc => String(pc || "").replace(/\s+/g, "").toUpperCase();
+async function geocodePostcodes(postcodes){
+  const unique = [...new Set(postcodes.map(normPC).filter(Boolean))];
+  for(let i=0;i<unique.length;i+=100){
+    const batch = unique.slice(i,i+100);
+    try{
+      const res = await fetch("https://api.postcodes.io/postcodes",{method:"POST",
+        headers:{"Content-Type":"application/json"}, body:JSON.stringify({postcodes:batch})});
+      const d = await res.json();
+      (d.result||[]).forEach(it=>{ if(it.result) geoCache[normPC(it.query)]={lat:it.result.latitude,lng:it.result.longitude}; });
+    }catch(e){ console.warn("geocode batch failed",e); }
+    await new Promise(r=>setTimeout(r,50));
+  }
+}
+function getPos(a){
+  const lat = parseFloat(a[FIELD_LAT]), lng = parseFloat(a[FIELD_LNG]);
+  if(!isNaN(lat) && !isNaN(lng)) return {lat,lng};
+  const g = geoCache[normPC(a[FIELD_CODE])];
+  return g ? {lat:g.lat,lng:g.lng} : null;
+}
+
+// ---- fetch, render, filter ------------------------------------------
+let allAccounts = [];
+
 async function fetchAccounts(){
-  let page = 1, out = [];
+  let page=1,out=[];
   while(true){
-    const r = await ZOHO.CRM.API.getAllRecords({ Entity:"Accounts", per_page:200, page });
-    const rows = (r && r.data) || [];
-    out = out.concat(rows);
-    if(rows.length < 200) break;
-    page++;
+    const r = await ZOHO.CRM.API.getAllRecords({Entity:"Accounts",per_page:200,page});
+    const rows=(r&&r.data)||[]; out=out.concat(rows);
+    if(rows.length<200) break; page++;
   }
-  return out.filter(a =>
-    a[FIELD_LAT] != null && a[FIELD_LAT] !== "" &&
-    a[FIELD_LNG] != null && a[FIELD_LNG] !== "");
-}
-
-function plot(accounts){
-  const bounds = [];
-  accounts.forEach(a => {
-    const lat = parseFloat(a[FIELD_LAT]), lng = parseFloat(a[FIELD_LNG]);
-    if(isNaN(lat) || isNaN(lng)) return;
-    const color = COLORS[a[FIELD_COLOR]] || COLORS._default;
-    L.marker([lat,lng], { icon: pinIcon(color), title: a[FIELD_NAME] || "" })
-      .bindPopup(popupHtml(a))
-      .addTo(map);
-    bounds.push([lat,lng]);
+  return out.filter(a=>{
+    const hasCoords = a[FIELD_LAT]!=null&&a[FIELD_LAT]!==""&&a[FIELD_LNG]!=null&&a[FIELD_LNG]!=="";
+    const hasPC = a[FIELD_CODE]!=null&&a[FIELD_CODE]!=="";
+    return hasCoords||hasPC;
   });
-  if(bounds.length) map.fitBounds(bounds, { padding:[30,30] });
-  return bounds.length;
 }
 
-// ---- boot: wait for CRM, fetch, plot ---------------------------------
+function renderMarkers(accounts){
+  markerLayer.clearLayers();
+  accounts.forEach(a=>{
+    const pos=getPos(a); if(!pos) return;
+    L.marker([pos.lat,pos.lng],{icon:pinIcon(colorFor(a[FIELD_COLOR])),title:a[FIELD_NAME]||""})
+      .bindPopup(popupHtml(a)).addTo(markerLayer);
+  });
+}
+
+function applyFilters(){
+  const filtered = allAccounts.filter(matches);
+  renderMarkers(filtered);
+  document.getElementById("count").textContent = filtered.length;
+}
+
 ZOHO.embeddedApp.on("PageLoad", async () => {
-  try {
+  try{
+    buildSidebar();
     setStatus("Loading accounts…");
-    const accounts = await fetchAccounts();
-    console.log("Distinct " + FIELD_COLOR + " values:",
-  [...new Set(accounts.map(a => JSON.stringify(a[FIELD_COLOR])))]);
-    const n = plot(accounts);
-    if(n) hideStatus();
-    else setStatus(`Loaded ${accounts.length} records, but none had usable coordinates.`, true);
-  } catch(e){
-    setStatus("Failed: " + e.message, true);
-    console.error(e);
-  }
+    allAccounts = await fetchAccounts();
+    fillCategories(allAccounts);
+
+    const needGeo = allAccounts.filter(a=>{
+      const lat=parseFloat(a[FIELD_LAT]),lng=parseFloat(a[FIELD_LNG]);
+      return (isNaN(lat)||isNaN(lng))&&a[FIELD_CODE];
+    });
+    if(needGeo.length){ setStatus(`Geocoding ${needGeo.length} postcodes…`); await geocodePostcodes(needGeo.map(a=>a[FIELD_CODE])); }
+
+    applyFilters();
+    const pts=[]; allAccounts.forEach(a=>{const p=getPos(a); if(p) pts.push([p.lat,p.lng]);});
+    if(pts.length){ map.fitBounds(pts,{padding:[30,30]}); hideStatus(); }
+    else setStatus(`Loaded ${allAccounts.length} records, but none could be located.`,true);
+  }catch(e){ setStatus("Failed: "+e.message,true); console.error(e); }
 });
 ZOHO.embeddedApp.init();
 </script>
