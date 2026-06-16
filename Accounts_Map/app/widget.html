@@ -112,6 +112,8 @@ ZOHO.embeddedApp.on("PageLoad", async () => {
   try {
     setStatus("Loading accounts…");
     const accounts = await fetchAccounts();
+    console.log("Distinct " + FIELD_COLOR + " values:",
+  [...new Set(accounts.map(a => JSON.stringify(a[FIELD_COLOR])))]);
     const n = plot(accounts);
     if(n) hideStatus();
     else setStatus(`Loaded ${accounts.length} records, but none had usable coordinates.`, true);
