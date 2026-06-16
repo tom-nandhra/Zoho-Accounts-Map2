@@ -1,17 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Account map (Zoho SDK)</title>
-<style>html,body,#map{height:100%;margin:0}</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Zoho embedded app SDK -->
 <script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
+<style>
+  html,body{height:100%;margin:0}
+  #map{height:100%}
+  #status{position:absolute;top:8px;left:8px;z-index:1000;background:#fff;border:1px solid #ccc;
+          border-radius:6px;padding:6px 10px;font:13px/1.4 system-ui,sans-serif;max-width:90vw}
+  #status.err{background:#fdecea;border-color:#c62828;color:#7a1c1c}
+  .popup-inner{font:13px/1.45 system-ui,sans-serif;min-width:180px}
+  .popup-inner h4{margin:0 0 4px;font-size:14px;color:#1a1a2e}
+  .popup-inner div{margin:2px 0}
+</style>
 </head>
 <body>
+<div id="status">Starting…</div>
 <div id="map"></div>
 <script>
-const GMAPS_KEY = "AIzaSyDpqFgQ-7NwTGSUXAiZSs4fLVKoDd_khFk";
-const FIELD_LAT="Billing_Latitude", FIELD_LNG="Billing_Longitude",
-      FIELD_COLOR="Account_Strength", FIELD_DESC="Description";
+// ---- config: set these to your field API names -----------------------
+const FIELD_LAT     = "Billing_Latitude";
+const FIELD_LNG     = "Billing_Longitude";
+const FIELD_NAME    = "Account_Name";
+const FIELD_COLOR   = "Your_Rating_Field";     // the Very Low..Very High picklist
+const FIELD_REVENUE = "Total_Business";
+const FIELD_WINLOSS = "Win_Loss_Percentage";
+
 const COLORS = {
   "Very Low":  "#2e7d32",
   "Low":       "#7cb342",
@@ -20,13 +39,47 @@ const COLORS = {
   "Very High": "#c62828",
   "_default":  "#9e9e9e"
 };
-//const COLORS = { "Red":"#c62828","Amber":"#f9a825","Green":"#2e7d32","_default":"#9e9e9e" };
+// ----------------------------------------------------------------------
 
-let accounts = [];
-const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const statusEl = document.getElementById("status");
+function setStatus(m, err){ statusEl.textContent = m; statusEl.className = err ? "err" : ""; }
+function hideStatus(){ statusEl.style.display = "none"; }
 
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
+  c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+
+function fmtMoney(v){
+  const n = Number(v);
+  return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB");
+}
+
+// Coloured teardrop pin as a Leaflet divIcon (same technique the IFG map uses)
+function pinIcon(color){
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">`
+    + `<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z" `
+    + `fill="${color}" stroke="#fff" stroke-width="1.5"/>`
+    + `<circle cx="12" cy="12" r="5" fill="#fff" opacity="0.9"/></svg>`;
+  return L.divIcon({ html: svg, className: "", iconSize: [24,36], iconAnchor: [12,36], popupAnchor: [0,-36] });
+}
+
+function popupHtml(a){
+  const rows = [];
+  if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
+    rows.push(`<div>Total Revenue: <b>${fmtMoney(a[FIELD_REVENUE])}</b></div>`);
+  if (a[FIELD_WINLOSS] != null && a[FIELD_WINLOSS] !== "")
+    rows.push(`<div>Win/Loss Ratio: <b>${esc(String(a[FIELD_WINLOSS]))}%</b></div>`);
+  return `<div class="popup-inner"><h4>${esc(a[FIELD_NAME])}</h4>${rows.join("")}</div>`;
+}
+
+// ---- Leaflet map + free keyless tiles --------------------------------
+const map = L.map("map", { center:[51.13,-0.1], zoom:6 });
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
+}).addTo(map);
+
+// ---- fetch Accounts via the Zoho SDK ---------------------------------
 async function fetchAccounts(){
-  let page=1, out=[];
+  let page = 1, out = [];
   while(true){
     const r = await ZOHO.CRM.API.getAllRecords({ Entity:"Accounts", per_page:200, page });
     const rows = (r && r.data) || [];
@@ -34,56 +87,38 @@ async function fetchAccounts(){
     if(rows.length < 200) break;
     page++;
   }
-  return out.filter(a => a[FIELD_LAT]!=null && a[FIELD_LAT]!=="" && a[FIELD_LNG]!=null && a[FIELD_LNG]!=="");
+  return out.filter(a =>
+    a[FIELD_LAT] != null && a[FIELD_LAT] !== "" &&
+    a[FIELD_LNG] != null && a[FIELD_LNG] !== "");
 }
 
-function fmtMoney(v){
-  const n = Number(v);
-  return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB");
-}
-
-function infoHtml(a){
-  const rows = [];
-  if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
-    rows.push(`<div>Total Revenue: <b>${fmtMoney(a[FIELD_REVENUE])}</b></div>`);
-  if (a[FIELD_WINLOSS] != null && a[FIELD_WINLOSS] !== "")
-    rows.push(`<div>Win/Loss Ratio: <b>${esc(String(a[FIELD_WINLOSS]))}%</b></div>`);
-  return `<div style="font:13px/1.45 system-ui,sans-serif;max-width:280px">`
-       + `<div style="font-weight:600;font-size:14px">${esc(a[FIELD_NAME] || "")}</div>`
-       + rows.join("") + `</div>`;
-}
-
-async function initMap(){
-  const { Map } = await google.maps.importLibrary("maps");
-  const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker");
-  const map = new Map(document.getElementById("map"),{center:{lat:51.13,lng:-0.1},zoom:6,mapId:"7492dafd828ff08faf4f40a5"});
-  const shared = new google.maps.InfoWindow();
-  const bounds = new google.maps.LatLngBounds();
-  let plotted=0;
-  accounts.forEach(a=>{
-    const lat=parseFloat(a[FIELD_LAT]), lng=parseFloat(a[FIELD_LNG]);
-    if(isNaN(lat)||isNaN(lng)) return;
-    const pos={lat,lng};
-    const color=COLORS[a[FIELD_COLOR]]||COLORS._default;
-    const pin=new PinElement({background:color,borderColor:"#000",glyphColor:"#fff"});
-    const marker=new AdvancedMarkerElement({map,position:pos,title:a.Account_Name||"",content:pin.element});
-    marker.addListener("gmp-click",()=>{shared.setContent(infoHtml(a));shared.open({map,anchor:marker});});
-    bounds.extend(pos); plotted++;
+function plot(accounts){
+  const bounds = [];
+  accounts.forEach(a => {
+    const lat = parseFloat(a[FIELD_LAT]), lng = parseFloat(a[FIELD_LNG]);
+    if(isNaN(lat) || isNaN(lng)) return;
+    const color = COLORS[a[FIELD_COLOR]] || COLORS._default;
+    L.marker([lat,lng], { icon: pinIcon(color), title: a[FIELD_NAME] || "" })
+      .bindPopup(popupHtml(a))
+      .addTo(map);
+    bounds.push([lat,lng]);
   });
-  if(plotted) map.fitBounds(bounds);
-}
-window.initMap = initMap;
-
-function loadGoogleMaps(){
-  const s=document.createElement("script");
-  s.src=`https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&loading=async&libraries=marker&callback=initMap`;
-  document.head.appendChild(s);
+  if(bounds.length) map.fitBounds(bounds, { padding:[30,30] });
+  return bounds.length;
 }
 
+// ---- boot: wait for CRM, fetch, plot ---------------------------------
 ZOHO.embeddedApp.on("PageLoad", async () => {
-  try { accounts = await fetchAccounts(); }
-  catch(e){ console.error("Account fetch failed", e); accounts = []; }
-  loadGoogleMaps();
+  try {
+    setStatus("Loading accounts…");
+    const accounts = await fetchAccounts();
+    const n = plot(accounts);
+    if(n) hideStatus();
+    else setStatus(`Loaded ${accounts.length} records, but none had usable coordinates.`, true);
+  } catch(e){
+    setStatus("Failed: " + e.message, true);
+    console.error(e);
+  }
 });
 ZOHO.embeddedApp.init();
 </script>
