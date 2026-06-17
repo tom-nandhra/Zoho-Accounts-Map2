@@ -55,6 +55,10 @@ const COLORS = {
 
 // Filter definitions. Bands are editable — adjust to your data.
 const FILTERS = [
+  { id:"f-active", label:"Status", type:"derived", options:["Active","Non-active"],
+    // Active = at least one open deal (a deal not Closed Won / Closed Lost),
+    // derived as Total_Deals minus the won and lost rollups.
+    derive: a => ((Number(a.Total_Deals)||0) - (Number(a.Total_Deals_WON)||0) - (Number(a.Total_Deals_LOST)||0)) > 0 ? "Active" : "Non-active" },
   { id:"f-industry", label:"Industry",        field:"Industry",       type:"category" },
   { id:"f-type",     label:"Account Type",    field:"Account_Type",   type:"category" },
   { id:"f-annrev",   label:"Annual Revenue",  field:"Annual_Revenue", type:"range", bands:[
@@ -118,6 +122,8 @@ function buildSidebar(){
       opts += [0,1,2,3,4].map(n => `<option value="${n}">${n}</option>`).join("") + `<option value="5+">5+</option>`;
     else if(f.type === "range")
       opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join("");
+    else if(f.type === "derived")
+      opts += f.options.map(o => `<option value="${o}">${o}</option>`).join("");
     return `<div class="fg"><label for="${f.id}">${f.label}</label><select id="${f.id}">${opts}</select></div>`;
   }).join("");
   FILTERS.forEach(f => document.getElementById(f.id).addEventListener("change", applyFilters));
@@ -151,6 +157,8 @@ function matches(a){
       if(n === null) return false;
       const b = f.bands[Number(sel)];
       if(!(n >= b.min && n < b.max)) return false;
+    } else if(f.type === "derived"){
+      if(f.derive(a) !== sel) return false;
     }
   }
   return true;
