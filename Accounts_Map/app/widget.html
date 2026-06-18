@@ -98,9 +98,9 @@ const FILTERS = [
       {label:"500+", min:501, max:Infinity} ] },
 
   // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  //{ id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  //{ id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  //{ id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
 
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
@@ -109,10 +109,10 @@ const FILTERS = [
       {label:"£1M+", min:1000000, max:Infinity} ] },
 
   // Win/Loss percentage, banded 0–100.
-  { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
-      {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
-      {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
-      {label:"81 – 100%", min:81, max:Infinity} ] },
+  //{ id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
+  //    {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
+  //    {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
+  //    {label:"81 – 100%", min:81, max:Infinity} ] },
 ];
 // =====================================================================
 // END CONFIG
