@@ -5,39 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Account map</title>
 
-<!--
-  ===================================================================
-  ZOHO CRM ACCOUNT MAP  —  Leaflet widget (externally hosted)
-  ===================================================================
-  WHAT THIS IS:
-    A single-file widget that plots Account records from Zoho CRM on a
-    map, colour-coded by Account Strength, with a sidebar of filters.
-    It is hosted outside Zoho (e.g. GitHub Pages) and registered as a
-    CRM Widget; the Zoho JS SDK lets it read CRM data live, inheriting
-    the logged-in user's session (so no API key and no data sits in
-    this file).
-
-  HOW IT FLOWS (top to bottom is NOT execution order):
-    1. The three <script>/<link> tags load Leaflet + the Zoho SDK.
-    2. Nothing meaningful runs until ZOHO.embeddedApp.init() (bottom of
-       file) completes the handshake with Zoho and fires "PageLoad".
-    3. Inside PageLoad: build sidebar -> fetch accounts -> filter+draw
-       -> zoom to fit.
-    4. After that it's reactive: changing any dropdown re-runs the
-       filter and redraws the pins.
-
-  THE ONE CLEVER BIT:
-    The FILTERS array is declarative. Each entry's "type" decides both
-    how its dropdown is built AND how it matches. So adding a filter is
-    a data change, not new UI code.
-  ===================================================================
--->
-
-<!-- Leaflet: the open-source map library (CSS first, then JS). -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<!-- Zoho Embedded App SDK: the bridge that lets this externally-hosted
-     page read/write the CRM it is embedded in. Exposes the global ZOHO. -->
 <script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
 
 <style>
@@ -81,20 +50,17 @@
 <div id="status">Starting…</div>
 
 <script>
-// =====================================================================
-// CONFIG  —  the only block you normally edit.
-// =====================================================================
-// Map your CRM field API names onto names the code uses. Nothing below
-// hardcodes a field, so renaming a field is a one-line change here.
-const FIELD_LAT     = "Billing_Latitude";   // latitude (account is only mapped if this and lng are present)
-const FIELD_LNG     = "Billing_Longitude";  // longitude
-const FIELD_NAME    = "Account_Name";       // shown as the popup title and pin tooltip
-const FIELD_COLOR   = "Your_Rating_Field";  // <-- SET THIS to your Account_Strength field; drives pin colour
-const FIELD_REVENUE = "Total_Business";     // shown in the popup
-const FIELD_WINLOSS = "Win_Loss_Percentage";// shown in the popup
 
-// Maps each Account Strength value to a pin colour. "_default" is the
-// fallback for anything unrecognised (rendered grey).
+// CRM field API names 
+
+const FIELD_LAT     = "Billing_Latitude";   
+const FIELD_LNG     = "Billing_Longitude";  
+const FIELD_NAME    = "Account_Name";       
+const FIELD_COLOR   = "Your_Rating_Field";  
+const FIELD_REVENUE = "Total_Business";     
+const FIELD_WINLOSS = "Win_Loss_Percentage";
+
+// Maps each Account Strength value to a pin colour.
 const COLORS = {
   "Very Low":"#2e7d32","Low":"#7cb342","Moderate":"#f9a825",
   "High":"#ef6c00","Very High":"#c62828","_default":"#9e9e9e"
