@@ -4,30 +4,71 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Account map</title>
+
+<!--
+  ===================================================================
+  ZOHO CRM ACCOUNT MAP  —  Leaflet widget (externally hosted)
+  ===================================================================
+  WHAT THIS IS:
+    A single-file widget that plots Account records from Zoho CRM on a
+    map, colour-coded by Account Strength, with a sidebar of filters.
+    It is hosted outside Zoho (e.g. GitHub Pages) and registered as a
+    CRM Widget; the Zoho JS SDK lets it read CRM data live, inheriting
+    the logged-in user's session (so no API key and no data sits in
+    this file).
+
+  HOW IT FLOWS (top to bottom is NOT execution order):
+    1. The three <script>/<link> tags load Leaflet + the Zoho SDK.
+    2. Nothing meaningful runs until ZOHO.embeddedApp.init() (bottom of
+       file) completes the handshake with Zoho and fires "PageLoad".
+    3. Inside PageLoad: build sidebar -> fetch accounts -> filter+draw
+       -> zoom to fit.
+    4. After that it's reactive: changing any dropdown re-runs the
+       filter and redraws the pins.
+
+  THE ONE CLEVER BIT:
+    The FILTERS array is declarative. Each entry's "type" decides both
+    how its dropdown is built AND how it matches. So adding a filter is
+    a data change, not new UI code.
+  ===================================================================
+-->
+
+<!-- Leaflet: the open-source map library (CSS first, then JS). -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Zoho Embedded App SDK: the bridge that lets this externally-hosted
+     page read/write the CRM it is embedded in. Exposes the global ZOHO. -->
 <script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
+
 <style>
+  /* Full-height app: a flex row of [fixed sidebar | flexible map]. */
   html,body{height:100%;margin:0;font-family:system-ui,-apple-system,sans-serif}
   .wrap{display:flex;height:100%}
+  /* Sidebar: fixed width, scrolls independently if filters overflow. */
   .sidebar{width:300px;flex-shrink:0;background:#f7f8fa;border-right:1px solid #e2e6ee;overflow-y:auto;padding:16px;box-sizing:border-box}
   .sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#444;margin:0 0 4px}
   .count{font-size:12px;color:#555;margin:0 0 14px}
   .count b{color:#1a1a2e}
+  /* One filter group = label + dropdown. */
   .fg{margin-bottom:10px}
   .fg label{display:block;font-size:11px;font-weight:600;color:#666;margin-bottom:3px}
   .fg select{width:100%;padding:6px 8px;border:1px solid #cdd3df;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box}
   #reset{width:100%;margin-top:8px;padding:8px;border:1px solid #cdd3df;border-radius:6px;background:#eef1f7;font-weight:600;cursor:pointer}
   #reset:hover{background:#e2e7f1}
+  /* Map fills the remaining width. Needs an explicit height to render. */
   #map{flex:1;height:100%}
+  /* Floating status/error box over the map (load progress, failures). */
   #status{position:absolute;top:8px;left:316px;z-index:1000;background:#fff;border:1px solid #ccc;border-radius:6px;padding:6px 10px;font-size:13px;max-width:60vw}
   #status.err{background:#fdecea;border-color:#c62828;color:#7a1c1c}
+  /* Popup shown when a pin is clicked. */
   .popup-inner{font:13px/1.45 system-ui,sans-serif;min-width:180px}
   .popup-inner h4{margin:0 0 4px;font-size:14px;color:#1a1a2e}
   .popup-inner div{margin:2px 0}
 </style>
 </head>
 <body>
+<!-- Layout skeleton. #filters is filled in by JS from the FILTERS array;
+     it is deliberately empty here. -->
 <div class="wrap">
   <div class="sidebar">
     <h2>Filters</h2>
@@ -38,66 +79,108 @@
   <div id="map"></div>
 </div>
 <div id="status">Starting…</div>
-<script>
-// ---- config: set these to your field API names -----------------------
-const FIELD_LAT     = "Billing_Latitude";
-const FIELD_LNG     = "Billing_Longitude";
-const FIELD_CODE    = "Billing_Code";
-const FIELD_NAME    = "Account_Name";
-const FIELD_COLOR   = "Account_Strength";     // <-- your Very Low..Very High field
-const FIELD_REVENUE = "Total_Business";
-const FIELD_WINLOSS = "Win_Loss_Percentage";
 
+<script>
+// =====================================================================
+// CONFIG  —  the only block you normally edit.
+// =====================================================================
+// Map your CRM field API names onto names the code uses. Nothing below
+// hardcodes a field, so renaming a field is a one-line change here.
+const FIELD_LAT     = "Billing_Latitude";   // latitude (account is only mapped if this and lng are present)
+const FIELD_LNG     = "Billing_Longitude";  // longitude
+const FIELD_NAME    = "Account_Name";       // shown as the popup title and pin tooltip
+const FIELD_COLOR   = "Your_Rating_Field";  // <-- SET THIS to your Account_Strength field; drives pin colour
+const FIELD_REVENUE = "Total_Business";     // shown in the popup
+const FIELD_WINLOSS = "Win_Loss_Percentage";// shown in the popup
+
+// Maps each Account Strength value to a pin colour. "_default" is the
+// fallback for anything unrecognised (rendered grey).
 const COLORS = {
   "Very Low":"#2e7d32","Low":"#7cb342","Moderate":"#f9a825",
   "High":"#ef6c00","Very High":"#c62828","_default":"#9e9e9e"
 };
 
-// Filter definitions. Bands are editable — adjust to your data.
+// ---- FILTER DEFINITIONS ---------------------------------------------
+// Each object = one dropdown. "type" controls BOTH how the dropdown is
+// built (buildSidebar) and how it filters (matches). Four types:
+//   category : distinct values are read from the data at runtime
+//   range    : numeric value must fall inside a chosen band
+//   count    : exact-count buckets 0,1,2,3,4,5+ (5+ means >= 5)
+//   derived  : value is computed per-account by a derive() function
+// Range bands below are sensible defaults — edit min/max to taste.
 const FILTERS = [
+  // "Active" isn't a stored field. It's computed: an account is Active
+  // if it has at least one open deal (a deal that's neither won nor
+  // lost), i.e. total deals minus the won and lost rollups is > 0.
   { id:"f-active", label:"Status", type:"derived", options:["Active","Non-active"],
-    // Active = at least one open deal (a deal not Closed Won / Closed Lost),
-    // derived as Total_Deals minus the won and lost rollups.
     derive: a => ((Number(a.Total_Deals)||0) - (Number(a.Total_Deals_WON)||0) - (Number(a.Total_Deals_LOST)||0)) > 0 ? "Active" : "Non-active" },
+
+  // Picklists: options auto-populate from whatever values exist in the data.
   { id:"f-industry", label:"Industry",        field:"Industry",       type:"category" },
   { id:"f-type",     label:"Account Type",    field:"Account_Type",   type:"category" },
+
+  // Currency: banded into ranges. max is exclusive (see matches()).
   { id:"f-annrev",   label:"Annual Revenue",  field:"Annual_Revenue", type:"range", bands:[
       {label:"< £100k", min:-Infinity, max:100000}, {label:"£100k – £500k", min:100000, max:500000},
       {label:"£500k – £1M", min:500000, max:1000000}, {label:"£1M – £5M", min:1000000, max:5000000},
       {label:"£5M+", min:5000000, max:Infinity} ] },
+
+  // Employee head-count bands.
   { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", bands:[
       {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
       {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
       {label:"500+", min:501, max:Infinity} ] },
+
+  // Deal-count rollups: exact buckets. Empty/null counts as 0.
   { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
   { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
   { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+
+  // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
       {label:"< £10k", min:-Infinity, max:10000}, {label:"£10k – £50k", min:10000, max:50000},
       {label:"£50k – £250k", min:50000, max:250000}, {label:"£250k – £1M", min:250000, max:1000000},
       {label:"£1M+", min:1000000, max:Infinity} ] },
+
+  // Win/Loss percentage, banded 0–100.
   { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
       {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
       {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
       {label:"81 – 100%", min:81, max:Infinity} ] },
 ];
-// ----------------------------------------------------------------------
+// =====================================================================
+// END CONFIG
+// =====================================================================
 
+
+// ---- Status box helpers ---------------------------------------------
 const statusEl = document.getElementById("status");
-function setStatus(m, err){ statusEl.textContent = m; statusEl.className = err ? "err" : ""; }
-function hideStatus(){ statusEl.style.display = "none"; }
+function setStatus(m, err){ statusEl.textContent = m; statusEl.className = err ? "err" : ""; } // err=true turns it red
+function hideStatus(){ statusEl.style.display = "none"; }                                       // called once everything loads
 
+// ---- Small generic helpers ------------------------------------------
+// Escape text before putting it into HTML (popup titles etc.) so a stray
+// & < > " in CRM data can't break or inject markup.
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+// Format a number as GBP for the popup; if it isn't a number, show it as-is.
 function fmtMoney(v){ const n = Number(v); return isNaN(n) ? esc(String(v)) : "£" + n.toLocaleString("en-GB"); }
+// Parse to a number, or return null if it isn't numeric. Note Number("")
+// and Number(null) are 0 (not NaN), so blanks become 0, not null.
 function valNum(v){ const n = Number(v); return isNaN(n) ? null : n; }
 
+// Pick a pin colour for an account's strength value. Trims + lowercases
+// both sides so "very high", "Very High " etc. all still match — this is
+// what prevents the "all pins grey" bug from minor data inconsistencies.
 function colorFor(v){
   const key = String(v == null ? "" : v).trim().toLowerCase();
   const m = Object.keys(COLORS).find(k => k.toLowerCase() === key);
   return m ? COLORS[m] : COLORS._default;
 }
 
+// Build a coloured teardrop pin as an inline SVG. Using a divIcon (HTML,
+// not an image file) is how the fill colour can vary per pin. iconAnchor
+// puts the tip of the teardrop on the exact coordinate.
 function pinIcon(color){
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">`
     + `<path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24C24 5.37 18.63 0 12 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>`
@@ -105,6 +188,8 @@ function pinIcon(color){
   return L.divIcon({ html: svg, className: "", iconSize:[24,36], iconAnchor:[12,36], popupAnchor:[0,-36] });
 }
 
+// Build the popup HTML for one account. Only adds a row if the field has
+// a value, so empty fields don't show blank lines.
 function popupHtml(a){
   const rows = [];
   if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
@@ -114,24 +199,33 @@ function popupHtml(a){
   return `<div class="popup-inner"><h4>${esc(a[FIELD_NAME])}</h4>${rows.join("")}</div>`;
 }
 
-// ---- build the filter controls ---------------------------------------
+// ---- Build the filter controls from the FILTERS array ---------------
 function buildSidebar(){
+  // For each filter, generate its <option>s based on type, then inject
+  // the <label> + <select> into the sidebar.
   document.getElementById("filters").innerHTML = FILTERS.map(f => {
-    let opts = '<option value="">All</option>';
+    let opts = '<option value="">All</option>';                       // "" = no filter applied
     if(f.type === "count")
       opts += [0,1,2,3,4].map(n => `<option value="${n}">${n}</option>`).join("") + `<option value="5+">5+</option>`;
     else if(f.type === "range")
-      opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join("");
+      opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join(""); // value = band index
     else if(f.type === "derived")
       opts += f.options.map(o => `<option value="${o}">${o}</option>`).join("");
+    // category options are added later by fillCategories() once data is loaded
     return `<div class="fg"><label for="${f.id}">${f.label}</label><select id="${f.id}">${opts}</select></div>`;
   }).join("");
+
+  // Any dropdown change re-applies all filters. Reset clears them all.
   FILTERS.forEach(f => document.getElementById(f.id).addEventListener("change", applyFilters));
   document.getElementById("reset").addEventListener("click", () => {
     FILTERS.forEach(f => document.getElementById(f.id).value = "");
     applyFilters();
   });
 }
+
+// Populate the category dropdowns (Industry, Account Type) with the
+// distinct values actually present in the data, sorted. This is why
+// those lists always match reality without being hardcoded.
 function fillCategories(accounts){
   FILTERS.filter(f => f.type === "category").forEach(f => {
     const vals = [...new Set(accounts.map(a => String(a[f.field]==null?"":a[f.field]).trim()).filter(Boolean))].sort();
@@ -140,63 +234,56 @@ function fillCategories(accounts){
   });
 }
 
-// ---- filter matching -------------------------------------------------
+// ---- Does one account pass ALL active filters? ----------------------
+// Returns false on the first filter it fails (filters combine with AND).
 function matches(a){
   for(const f of FILTERS){
     const sel = document.getElementById(f.id).value;
-    if(sel === "") continue;
-    const raw = a[f.field];
+    if(sel === "") continue;          // "All" selected -> this filter is inactive
+    const raw = a[f.field];           // (unused by the derived type, which reads the whole account)
     if(f.type === "category"){
       if(String(raw==null?"":raw).trim() !== sel) return false;
     } else if(f.type === "count"){
-      const n = valNum(raw) ?? 0;
+      const n = valNum(raw) ?? 0;     // blank/non-numeric counts as 0
       if(sel === "5+"){ if(!(n >= 5)) return false; }
       else if(n !== Number(sel)) return false;
     } else if(f.type === "range"){
       const n = valNum(raw);
-      if(n === null) return false;
+      if(n === null) return false;    // a non-numeric value matches no band, so it's filtered out
       const b = f.bands[Number(sel)];
-      if(!(n >= b.min && n < b.max)) return false;
+      if(!(n >= b.min && n < b.max)) return false; // min inclusive, max exclusive
     } else if(f.type === "derived"){
-      if(f.derive(a) !== sel) return false;
+      if(f.derive(a) !== sel) return false; // compare the computed label to the selection
     }
   }
   return true;
 }
 
-// ---- Leaflet map -----------------------------------------------------
-const map = L.map("map", { center:[51.13,-0.1], zoom:6 });
+// ---- Leaflet map setup ----------------------------------------------
+const map = L.map("map", { center:[51.13,-0.1], zoom:6 }); // initial view ~ South-East England
+// CartoDB "light" tiles: free, keyless, muted basemap. {s}=subdomain,
+// {z}/{x}/{y}=tile coords, {r}=@2x for retina screens.
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
   attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:"abcd", maxZoom:19
 }).addTo(map);
+// All pins live in this one layer group, so a filter change can wipe and
+// redraw them with a single clearLayers() call.
 const markerLayer = L.layerGroup().addTo(map);
 
-// ---- postcode geocoding fallback (postcodes.io, UK) ------------------
-const geoCache = {};
-const normPC = pc => String(pc || "").replace(/\s+/g, "").toUpperCase();
-async function geocodePostcodes(postcodes){
-  const unique = [...new Set(postcodes.map(normPC).filter(Boolean))];
-  for(let i=0;i<unique.length;i+=100){
-    const batch = unique.slice(i,i+100);
-    try{
-      const res = await fetch("https://api.postcodes.io/postcodes",{method:"POST",
-        headers:{"Content-Type":"application/json"}, body:JSON.stringify({postcodes:batch})});
-      const d = await res.json();
-      (d.result||[]).forEach(it=>{ if(it.result) geoCache[normPC(it.query)]={lat:it.result.latitude,lng:it.result.longitude}; });
-    }catch(e){ console.warn("geocode batch failed",e); }
-    await new Promise(r=>setTimeout(r,50));
-  }
-}
+// ---- Resolve an account to a map position ---------------------------
+// Coordinates only. Returns null if either lat or lng is missing or
+// non-numeric, in which case the account simply isn't drawn.
 function getPos(a){
   const lat = parseFloat(a[FIELD_LAT]), lng = parseFloat(a[FIELD_LNG]);
   if(!isNaN(lat) && !isNaN(lng)) return {lat,lng};
-  const g = geoCache[normPC(a[FIELD_CODE])];
-  return g ? {lat:g.lat,lng:g.lng} : null;
+  return null;
 }
 
-// ---- fetch, render, filter ------------------------------------------
-let allAccounts = [];
+// ---- Data fetch, render, filter -------------------------------------
+let allAccounts = [];   // the full fetched set; filtering works on a copy of this
 
+// Pull every Account via the Zoho SDK, 200 per page, until a short page
+// signals the last one. Then drop any account without usable coordinates.
 async function fetchAccounts(){
   let page=1,out=[];
   while(true){
@@ -204,13 +291,11 @@ async function fetchAccounts(){
     const rows=(r&&r.data)||[]; out=out.concat(rows);
     if(rows.length<200) break; page++;
   }
-  return out.filter(a=>{
-    const hasCoords = a[FIELD_LAT]!=null&&a[FIELD_LAT]!==""&&a[FIELD_LNG]!=null&&a[FIELD_LNG]!=="";
-    const hasPC = a[FIELD_CODE]!=null&&a[FIELD_CODE]!=="";
-    return hasCoords||hasPC;
-  });
+  return out.filter(a=>
+    a[FIELD_LAT]!=null && a[FIELD_LAT]!=="" && a[FIELD_LNG]!=null && a[FIELD_LNG]!=="");
 }
 
+// Wipe existing pins and draw one per account that has a position.
 function renderMarkers(accounts){
   markerLayer.clearLayers();
   accounts.forEach(a=>{
@@ -220,31 +305,36 @@ function renderMarkers(accounts){
   });
 }
 
+// The reactive core: filter the full set, redraw, update the count.
+// Runs on first load and on every dropdown change.
 function applyFilters(){
   const filtered = allAccounts.filter(matches);
   renderMarkers(filtered);
   document.getElementById("count").textContent = filtered.length;
 }
 
+// ---- Lifecycle ------------------------------------------------------
+// Registered before init(). The SDK fires "PageLoad" once it has finished
+// the handshake with Zoho and the CRM session is available.
 ZOHO.embeddedApp.on("PageLoad", async () => {
   try{
-    buildSidebar();
+    buildSidebar();                            // 1. render the (mostly empty) dropdowns
     setStatus("Loading accounts…");
-    allAccounts = await fetchAccounts();
-    fillCategories(allAccounts);
+    allAccounts = await fetchAccounts();       // 2. pull the data from the CRM
+    fillCategories(allAccounts);               // 3. fill Industry/Account Type options from the data
 
-    const needGeo = allAccounts.filter(a=>{
-      const lat=parseFloat(a[FIELD_LAT]),lng=parseFloat(a[FIELD_LNG]);
-      return (isNaN(lat)||isNaN(lng))&&a[FIELD_CODE];
-    });
-    if(needGeo.length){ setStatus(`Geocoding ${needGeo.length} postcodes…`); await geocodePostcodes(needGeo.map(a=>a[FIELD_CODE])); }
+    applyFilters();                            // 4. first draw (no filters selected = everything)
 
-    applyFilters();
+    // 5. Zoom to contain all plottable accounts — done ONCE on load so
+    //    later filtering doesn't keep jerking the viewport around.
     const pts=[]; allAccounts.forEach(a=>{const p=getPos(a); if(p) pts.push([p.lat,p.lng]);});
     if(pts.length){ map.fitBounds(pts,{padding:[30,30]}); hideStatus(); }
-    else setStatus(`Loaded ${allAccounts.length} records, but none could be located.`,true);
-  }catch(e){ setStatus("Failed: "+e.message,true); console.error(e); }
+    else setStatus(`Loaded ${allAccounts.length} records, but none had coordinates to plot.`,true);
+  }catch(e){ setStatus("Failed: "+e.message,true); console.error(e); } // surface any error in the status box
 });
+
+// Kicks off the whole thing: start the SDK handshake, which eventually
+// triggers the PageLoad handler above. Nothing runs until this resolves.
 ZOHO.embeddedApp.init();
 </script>
 </body>
