@@ -3,11 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Account map</title>
+<title>Account map (test / accounts.json)</title>
 
+<!--
+  ===================================================================
+  ACCOUNT MAP  —  LOCAL TEST BUILD (reads accounts.json)
+  ===================================================================
+  WHAT THIS IS:
+    A standalone copy of the CRM account map for testing WITHOUT Zoho.
+    Instead of pulling records through the Zoho SDK, it loads a static
+    accounts.json file. Everything else — sidebar, filters, colouring,
+    popups, render loop — is identical to the live SDK version, so what
+    you see here is what you get in the widget.
+
+  HOW IT DIFFERS FROM THE LIVE (SDK) VERSION:
+    - No Zoho SDK <script>, and no ZOHO.embeddedApp lifecycle.
+    - fetchAccounts() does fetch('accounts.json') instead of a CRM call.
+    - Bootstraps with a plain init() that runs immediately.
+    - FIELD_COLOR is already set to Account_Strength here.
+
+  HOW TO RUN IT:
+    fetch() is blocked on file:// URLs, so don't double-click this file.
+    Serve the folder over HTTP, e.g. in the folder run:  py -m http.server
+    then open  http://localhost:8000/index-json.html
+
+  HOW IT FLOWS:
+    init() -> build sidebar -> fetch accounts.json -> filter+draw ->
+    zoom to fit. After that it's reactive: any dropdown change re-runs
+    the filter and redraws the pins.
+
+  THE ONE CLEVER BIT:
+    The FILTERS array is declarative. Each entry's "type" decides both
+    how its dropdown is built AND how it matches, so adding a filter is
+    a data change, not new UI code.
+  ===================================================================
+-->
+
+<!-- Leaflet: the open-source map library (CSS first, then JS). -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
+<!-- NOTE: the Zoho SDK is intentionally absent. Data comes from accounts.json. -->
 
 <style>
   /* Full-height app: a flex row of [fixed sidebar | flexible map]. */
@@ -33,6 +68,7 @@
   .popup-inner{font:13px/1.45 system-ui,sans-serif;min-width:180px}
   .popup-inner h4{margin:0 0 4px;font-size:14px;color:#1a1a2e}
   .popup-inner div{margin:2px 0}
+  .popup-inner .addr{color:#555;font-size:12px;margin:2px 0 6px}
 </style>
 </head>
 <body>
@@ -50,17 +86,24 @@
 <div id="status">Starting…</div>
 
 <script>
+// =====================================================================
+// CONFIG  —  the only block you normally edit.
+// =====================================================================
+const DATA_URL      = "accounts.json";      // test data source (replaces the Zoho SDK call)
 
-// CRM field API names 
+// Map your CRM field API names onto names the code uses. Nothing below
+// hardcodes a field, so renaming a field is a one-line change here.
+const FIELD_LAT     = "Billing_Latitude";   // latitude (account is only mapped if this and lng are present)
+const FIELD_LNG     = "Billing_Longitude";  // longitude
+const FIELD_NAME    = "Account_Name";       // shown as the popup title and pin tooltip
+const FIELD_COLOR   = "Account_Strength";   // drives pin colour (Very Low..Very High)
+const FIELD_REVENUE = "Total_Business";     // shown in the popup
+const FIELD_WINLOSS = "Win_Loss_Percentage";// shown in the popup
+// Billing address parts shown in the popup, in order. Blank parts are skipped.
+const FIELD_ADDRESS = ["Billing_Street","Billing_City","Billing_State","Billing_Code","Billing_Country"];
 
-const FIELD_LAT     = "Billing_Latitude";   
-const FIELD_LNG     = "Billing_Longitude";  
-const FIELD_NAME    = "Account_Name";       
-const FIELD_COLOR   = "Account_Strength";  
-const FIELD_REVENUE = "Total_Business";     
-const FIELD_WINLOSS = "Win_Loss_Percentage";
-
-// Maps each Account Strength value to a pin colour.
+// Maps each Account Strength value to a pin colour. "_default" is the
+// fallback for anything unrecognised (rendered grey).
 const COLORS = {
   "Very Low":"#2e7d32","Low":"#7cb342","Moderate":"#f9a825",
   "High":"#ef6c00","Very High":"#c62828","_default":"#9e9e9e"
@@ -98,9 +141,9 @@ const FILTERS = [
       {label:"500+", min:501, max:Infinity} ] },
 
   // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  //{ id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  //{ id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  //{ id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
 
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
@@ -109,10 +152,10 @@ const FILTERS = [
       {label:"£1M+", min:1000000, max:Infinity} ] },
 
   // Win/Loss percentage, banded 0–100.
-  //{ id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
-  //    {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
-  //    {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
-  //    {label:"81 – 100%", min:81, max:Infinity} ] },
+  { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
+      {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
+      {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
+      {label:"81 – 100%", min:81, max:Infinity} ] },
 ];
 // =====================================================================
 // END CONFIG
@@ -126,7 +169,7 @@ function hideStatus(){ statusEl.style.display = "none"; }                       
 
 // ---- Small generic helpers ------------------------------------------
 // Escape text before putting it into HTML (popup titles etc.) so a stray
-// & < > " in CRM data can't break or inject markup.
+// & < > " in the data can't break or inject markup.
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 // Format a number as GBP for the popup; if it isn't a number, show it as-is.
@@ -158,11 +201,14 @@ function pinIcon(color){
 // a value, so empty fields don't show blank lines.
 function popupHtml(a){
   const rows = [];
+  // Billing address: present parts only, joined in order under the title.
+  const parts = FIELD_ADDRESS.map(f => a[f]).filter(v => v != null && String(v).trim() !== "");
+  const addr = parts.length ? `<div class="addr">${parts.map(esc).join(", ")}</div>` : "";
   if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
     rows.push(`<div>Total Revenue: <b>${fmtMoney(a[FIELD_REVENUE])}</b></div>`);
   if (a[FIELD_WINLOSS] != null && a[FIELD_WINLOSS] !== "")
     rows.push(`<div>Win/Loss Ratio: <b>${esc(String(a[FIELD_WINLOSS]))}%</b></div>`);
-  return `<div class="popup-inner"><h4>${esc(a[FIELD_NAME])}</h4>${rows.join("")}</div>`;
+  return `<div class="popup-inner"><h4>${esc(a[FIELD_NAME])}</h4>${addr}${rows.join("")}</div>`;
 }
 
 // ---- Build the filter controls from the FILTERS array ---------------
@@ -246,18 +292,17 @@ function getPos(a){
 }
 
 // ---- Data fetch, render, filter -------------------------------------
-let allAccounts = [];   // the full fetched set; filtering works on a copy of this
+let allAccounts = [];   // the full loaded set; filtering works on a copy of this
 
-// Pull every Account via the Zoho SDK, 200 per page, until a short page
-// signals the last one. Then drop any account without usable coordinates.
+// Load the static JSON file instead of calling the Zoho SDK. Accepts
+// either a bare array or a { "data": [...] } wrapper (the SDK's shape).
+// Then drops any account without usable coordinates.
 async function fetchAccounts(){
-  let page=1,out=[];
-  while(true){
-    const r = await ZOHO.CRM.API.getAllRecords({Entity:"Accounts",per_page:200,page});
-    const rows=(r&&r.data)||[]; out=out.concat(rows);
-    if(rows.length<200) break; page++;
-  }
-  return out.filter(a=>
+  const res = await fetch(DATA_URL, { cache: "no-store" });
+  if(!res.ok) throw new Error(`Could not load ${DATA_URL} (HTTP ${res.status})`);
+  const json = await res.json();
+  const rows = Array.isArray(json) ? json : (json.data || []);
+  return rows.filter(a=>
     a[FIELD_LAT]!=null && a[FIELD_LAT]!=="" && a[FIELD_LNG]!=null && a[FIELD_LNG]!=="");
 }
 
@@ -279,14 +324,14 @@ function applyFilters(){
   document.getElementById("count").textContent = filtered.length;
 }
 
-// ---- Lifecycle ------------------------------------------------------
-// Registered before init(). The SDK fires "PageLoad" once it has finished
-// the handshake with Zoho and the CRM session is available.
-ZOHO.embeddedApp.on("PageLoad", async () => {
+// ---- Bootstrap ------------------------------------------------------
+// Plain async startup (no Zoho lifecycle). Runs immediately because the
+// script sits at the end of <body>, so the DOM already exists.
+async function init(){
   try{
     buildSidebar();                            // 1. render the (mostly empty) dropdowns
     setStatus("Loading accounts…");
-    allAccounts = await fetchAccounts();       // 2. pull the data from the CRM
+    allAccounts = await fetchAccounts();       // 2. load accounts.json
     fillCategories(allAccounts);               // 3. fill Industry/Account Type options from the data
 
     applyFilters();                            // 4. first draw (no filters selected = everything)
@@ -297,11 +342,8 @@ ZOHO.embeddedApp.on("PageLoad", async () => {
     if(pts.length){ map.fitBounds(pts,{padding:[30,30]}); hideStatus(); }
     else setStatus(`Loaded ${allAccounts.length} records, but none had coordinates to plot.`,true);
   }catch(e){ setStatus("Failed: "+e.message,true); console.error(e); } // surface any error in the status box
-});
-
-// Kicks off the whole thing: start the SDK handshake, which eventually
-// triggers the PageLoad handler above. Nothing runs until this resolves.
-ZOHO.embeddedApp.init();
+}
+init();
 </script>
 </body>
 </html>
