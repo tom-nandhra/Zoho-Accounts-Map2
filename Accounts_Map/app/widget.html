@@ -11,7 +11,7 @@
   ===================================================================
   WHAT THIS IS:
     A single-file widget that plots Account records from Zoho CRM on a
-    map, colour-coded by Account Strength, with a sidebar of filters.
+    map, coloured by open-pipeline value, with a sidebar of filters.
     It is hosted outside Zoho (e.g. GitHub Pages) and registered as a
     CRM Widget; the Zoho JS SDK lets it read CRM data live, inheriting
     the logged-in user's session (so no API key and no data sits in
@@ -90,18 +90,35 @@
 const FIELD_LAT     = "Billing_Latitude";   // latitude (account is only mapped if this and lng are present)
 const FIELD_LNG     = "Billing_Longitude";  // longitude
 const FIELD_NAME    = "Account_Name";       // shown as the popup title and pin tooltip
-const FIELD_COLOR   = "Your_Rating_Field";  // <-- SET THIS to your Account_Strength field; drives pin colour
 const FIELD_REVENUE = "Total_Business";     // shown in the popup
 const FIELD_WINLOSS = "Win_Loss_Percentage";// shown in the popup
 // Billing address parts shown in the popup, in order. Blank parts are skipped.
 const FIELD_ADDRESS = ["Billing_Street","Billing_City","Billing_State","Billing_Code","Billing_Country"];
 
-// Maps each Account Strength value to a pin colour. "_default" is the
-// fallback for anything unrecognised (rendered grey).
-const COLORS = {
-  "Very Low":"#2e7d32","Low":"#7cb342","Moderate":"#f9a825",
-  "High":"#ef6c00","Very High":"#c62828","_default":"#9e9e9e"
-};
+// ---- PIN COLOUR: by OPEN PIPELINE value ------------------------------
+// Each pin is coloured by the account's "open pipeline" = the sum of
+// Amount across that account's deals whose Stage is NOT one of the closed
+// stages below. This is computed live from the Deals module on load
+// (see fetchOpenPipelineByAccount) and stored on each account as
+// a._openPipeline.
+//
+// Stages treated as closed (excluded from the sum). Adjust if your CRM
+// uses different stage names:
+const CLOSED_STAGES = ["Closed Won","Closed Lost","Closed Lost to Competition"];
+// Deal field API names used for the aggregation:
+const FIELD_DEAL_STAGE   = "Stage";
+const FIELD_DEAL_AMOUNT  = "Amount";
+const FIELD_DEAL_ACCOUNT = "Account_Name";  // lookup on Deals back to Accounts
+// Colour bands (ascending by `min`, in £). An account gets the colour of
+// the highest band whose `min` its pipeline value reaches. £0 = grey.
+// Edit thresholds/colours freely; `label` is for a legend if you add one.
+const PIPELINE_BANDS = [
+  { min: 0,      color:"#9e9e9e", label:"No open pipeline" },
+  { min: 1,      color:"#c8e6c9", label:"Up to £50k" },
+  { min: 50000,  color:"#81c784", label:"£50k – £150k" },
+  { min: 150000, color:"#43a047", label:"£150k – £500k" },
+  { min: 500000, color:"#1b5e20", label:"£500k and over" },
+];
 
 // ---- FILTER DEFINITIONS ---------------------------------------------
 // Each object = one dropdown. "type" controls BOTH how the dropdown is
@@ -172,13 +189,13 @@ function fmtMoney(v){ const n = Number(v); return isNaN(n) ? esc(String(v)) : "�
 // and Number(null) are 0 (not NaN), so blanks become 0, not null.
 function valNum(v){ const n = Number(v); return isNaN(n) ? null : n; }
 
-// Pick a pin colour for an account's strength value. Trims + lowercases
-// both sides so "very high", "Very High " etc. all still match — this is
-// what prevents the "all pins grey" bug from minor data inconsistencies.
-function colorFor(v){
-  const key = String(v == null ? "" : v).trim().toLowerCase();
-  const m = Object.keys(COLORS).find(k => k.toLowerCase() === key);
-  return m ? COLORS[m] : COLORS._default;
+// Pick a pin colour from an account's open-pipeline value: the colour of
+// the highest band whose `min` the value reaches (bands are ascending).
+function colorForPipeline(value){
+  const v = Number(value) || 0;          // missing/non-numeric -> 0 -> grey
+  let c = PIPELINE_BANDS[0].color;
+  for(const b of PIPELINE_BANDS){ if(v >= b.min) c = b.color; }
+  return c;
 }
 
 // Build a coloured teardrop pin as an inline SVG. Using a divIcon (HTML,
@@ -198,6 +215,8 @@ function popupHtml(a){
   // Billing address: present parts only, joined in order under the title.
   const parts = FIELD_ADDRESS.map(f => a[f]).filter(v => v != null && String(v).trim() !== "");
   const addr = parts.length ? `<div class="addr">${parts.map(esc).join(", ")}</div>` : "";
+  // Open pipeline drives the pin colour, so show it in the popup too.
+  rows.push(`<div>Open Pipeline: <b>${fmtMoney(a._openPipeline || 0)}</b></div>`);
   if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
     rows.push(`<div>Total Revenue: <b>${fmtMoney(a[FIELD_REVENUE])}</b></div>`);
   if (a[FIELD_WINLOSS] != null && a[FIELD_WINLOSS] !== "")
@@ -301,12 +320,38 @@ async function fetchAccounts(){
     a[FIELD_LAT]!=null && a[FIELD_LAT]!=="" && a[FIELD_LNG]!=null && a[FIELD_LNG]!=="");
 }
 
+// Sum each account's OPEN pipeline from the Deals module. Pulls all deals
+// (200 per page), skips any whose Stage is closed (won/lost), and adds up
+// Amount grouped by the deal's Account_Name lookup id. Returns a map of
+// { accountId: openPipelineTotal }. Deals with no account link are ignored.
+// NOTE: this fetches every deal once per load. Fine for small/medium orgs;
+// for a large Deals table, prefer a CRM rollup-summary field instead (a
+// SUM of Amount with a "Stage is none of the closed stages" criteria) and
+// just read that field off the account — far lighter than this scan.
+async function fetchOpenPipelineByAccount(){
+  const sums = {};
+  let page=1;
+  while(true){
+    const r = await ZOHO.CRM.API.getAllRecords({Entity:"Deals",per_page:200,page});
+    const rows=(r&&r.data)||[];
+    rows.forEach(d=>{
+      if(CLOSED_STAGES.includes(d[FIELD_DEAL_STAGE])) return;   // skip closed deals
+      const acc = d[FIELD_DEAL_ACCOUNT];                        // lookup object: { id, name }
+      const id = acc && acc.id;
+      if(!id) return;                                           // deal not linked to an account
+      sums[id] = (sums[id] || 0) + (Number(d[FIELD_DEAL_AMOUNT]) || 0);
+    });
+    if(rows.length<200) break; page++;
+  }
+  return sums;
+}
+
 // Wipe existing pins and draw one per account that has a position.
 function renderMarkers(accounts){
   markerLayer.clearLayers();
   accounts.forEach(a=>{
     const pos=getPos(a); if(!pos) return;
-    L.marker([pos.lat,pos.lng],{icon:pinIcon(colorFor(a[FIELD_COLOR])),title:a[FIELD_NAME]||""})
+    L.marker([pos.lat,pos.lng],{icon:pinIcon(colorForPipeline(a._openPipeline)),title:a[FIELD_NAME]||""})
       .bindPopup(popupHtml(a)).addTo(markerLayer);
   });
 }
@@ -328,6 +373,12 @@ ZOHO.embeddedApp.on("PageLoad", async () => {
     setStatus("Loading accounts…");
     allAccounts = await fetchAccounts();       // 2. pull the data from the CRM
     fillCategories(allAccounts);               // 3. fill Industry/Account Type options from the data
+
+    // 3b. Sum each account's open-pipeline value from the Deals module,
+    //     then attach it to every account (drives pin colour + popup).
+    setStatus("Loading deals…");
+    const pipeline = await fetchOpenPipelineByAccount();
+    allAccounts.forEach(a => a._openPipeline = pipeline[a.id] || 0);
 
     applyFilters();                            // 4. first draw (no filters selected = everything)
 
