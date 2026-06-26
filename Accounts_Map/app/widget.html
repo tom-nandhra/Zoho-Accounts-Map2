@@ -118,11 +118,10 @@ const FIELD_DEAL_ACCOUNT = "Account_Name";  // lookup on Deals back to Accounts
 // Edit thresholds/colours freely; `label` is for a legend if you add one.
 const PIPELINE_BANDS = [
   { min: 0,      color:"#bdbdbd", label:"No open pipeline" },
-  { min: 1,      color:"#fdae6b", label:"Up to £10k" },
-  { min: 10000,  color:"#e79150", label:"£10k – £50k" },
-  { min: 50000, color:"#d27336", label:"£50k – £250k" },
-  { min: 250000, color:"#bc561d", label:"£250k - £1M" },
-  { min: 1000000, color:"#a63603", label:"Over £1M" },
+  { min: 1,      color:"#fdae6b", label:"Up to £50k" },
+  { min: 50000,  color:"#fd8d3c", label:"£50k – £150k" },
+  { min: 150000, color:"#e6550d", label:"£150k – £500k" },
+  { min: 500000, color:"#a63603", label:"£500k and over" },
 ];
 
 // ---- FILTER DEFINITIONS ---------------------------------------------
@@ -144,7 +143,7 @@ const FILTERS = [
     derive: a => ((Number(a.Total_Deals)||0) - (Number(a.Total_Deals_WON)||0) - (Number(a.Total_Deals_LOST)||0)) > 0 ? "Active" : "Non-active" },
 
   // Picklists: options auto-populate from whatever values exist in the data.
-  { id:"f-industry", label:"Industry",        field:"Industry",       type:"category" },
+  { id:"f-industry", label:"Industry Sector", field:"Industry_Sector", type:"category" },
   { id:"f-type",     label:"Account Type",    field:"Account_Type",   type:"category" },
 
   // Won-revenue rollup, banded.
@@ -168,6 +167,12 @@ const FILTERS = [
   { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count", adv:true },
   { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count", adv:true },
   { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count", adv:true },
+
+  // Employee head-count bands.
+  { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", adv:true, bands:[
+      {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
+      {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
+      {label:"500+", min:501, max:Infinity} ] },
 
   // Win/Loss percentage, banded 0–100.
   { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", adv:true, bands:[
