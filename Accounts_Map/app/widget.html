@@ -114,10 +114,11 @@ const FIELD_DEAL_ACCOUNT = "Account_Name";  // lookup on Deals back to Accounts
 // Edit thresholds/colours freely; `label` is for a legend if you add one.
 const PIPELINE_BANDS = [
   { min: 0,      color:"#bdbdbd", label:"No open pipeline" },
-  { min: 1,      color:"#fdae6b", label:"Up to £50k" },
-  { min: 50000,  color:"#fd8d3c", label:"£50k – £150k" },
-  { min: 150000, color:"#e6550d", label:"£150k – £500k" },
-  { min: 500000, color:"#a63603", label:"£500k and over" },
+  { min: 1,      color:"#fdae6b", label:"Up to £10k" },
+  { min: 10000,  color:"#fd8d3c", label:"£10k – £50k" },
+  { min: 50000, color:"#e6550d", label:"£50k – £250k" },
+  { min: 250000, color:"#a63603", label:"£250k - £1M" },
+  { min: 1000000, color:"#a63603", label:"Over £1M" },
 ];
 
 // ---- FILTER DEFINITIONS ---------------------------------------------
@@ -151,10 +152,10 @@ const FILTERS = [
       {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
       {label:"500+", min:501, max:Infinity} ] },
 
-  // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  // // Deal-count rollups: exact buckets. Empty/null counts as 0.
+  // { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  // { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  // { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
 
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
