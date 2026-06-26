@@ -146,15 +146,15 @@ const FILTERS = [
       {label:"£5M+", min:5000000, max:Infinity} ] },
 
   // Employee head-count bands.
-  { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", bands:[
-      {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
-      {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
-      {label:"500+", min:501, max:Infinity} ] },
+  // { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", bands:[
+  //     {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
+  //     {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
+  //     {label:"500+", min:501, max:Infinity} ] },
 
-  // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  // // Deal-count rollups: exact buckets. Empty/null counts as 0.
+  // { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  // { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  // { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
 
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
@@ -162,11 +162,11 @@ const FILTERS = [
       {label:"£50k – £250k", min:50000, max:250000}, {label:"£250k – £1M", min:250000, max:1000000},
       {label:"£1M+", min:1000000, max:Infinity} ] },
 
-  // Win/Loss percentage, banded 0–100.
-  { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
-      {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
-      {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
-      {label:"81 – 100%", min:81, max:Infinity} ] },
+  // // Win/Loss percentage, banded 0–100.
+  // { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
+  //     {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
+  //     {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
+  //     {label:"81 – 100%", min:81, max:Infinity} ] },
 ];
 // =====================================================================
 // END CONFIG
