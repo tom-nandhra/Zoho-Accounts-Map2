@@ -56,7 +56,7 @@
   #reset{width:100%;margin-top:8px;padding:8px;border:1px solid #cdd3df;border-radius:6px;background:#eef1f7;font-weight:600;cursor:pointer}
   #reset:hover{background:#e2e7f1}
   /* "Show more options" expander toggle. */
-  #more-toggle{width:100%;margin:2px 0 8px;padding:6px 0;border:none;background:none;color:#2a6fb0;font-weight:600;font-size:12px;cursor:pointer;text-align:left}
+  #more-toggle{width:100%;margin:2px 0 8px;padding:6px 0;border:none;background:none;color:#555;font-weight:600;font-size:12px;cursor:pointer;text-align:left}
   #more-toggle:hover{text-decoration:underline}
   #adv-filters[hidden]{display:none}
   /* Map fills the remaining width. Needs an explicit height to render. */
@@ -85,7 +85,7 @@
   .d-deal-amt{flex-shrink:0;background:#e9f2fb;color:#1c5fa8;border-radius:6px;padding:1px 8px;font-weight:600;font-size:12px}
   .d-deal-sub{color:#7a838f;font-size:12px;margin-top:2px}
   .d-empty{color:#9aa1ab;font-style:italic}
-  .d-link{color:#2a6fb0;cursor:pointer}
+  .d-link{color:#1a1a2e;cursor:pointer}
   .d-link:hover{text-decoration:underline}
 </style>
 </head>
@@ -139,11 +139,10 @@ const FIELD_DEAL_DATE    = "Closing_Date";  // shown in the detail panel's deal 
 // Edit thresholds/colours freely; `label` is for a legend if you add one.
 const PIPELINE_BANDS = [
   { min: 0,      color:"#bdbdbd", label:"No open pipeline" },
-  { min: 1,      color:"#fdae6b", label:"Up to £10k" },
-  { min: 10000,  color:"#e79150", label:"£10k – £50k" },
-  { min: 50000, color:"#d27336", label:"£50k – £250k" },
-  { min: 250000, color:"#bc561d", label:"£250k - £1M" },
-  { min: 1000000, color:"#a63603", label:"Over £1M" },
+  { min: 1,      color:"#fdae6b", label:"Up to £50k" },
+  { min: 50000,  color:"#fd8d3c", label:"£50k – £150k" },
+  { min: 150000, color:"#e6550d", label:"£150k – £500k" },
+  { min: 500000, color:"#a63603", label:"£500k and over" },
 ];
 
 // ---- FILTER DEFINITIONS ---------------------------------------------
