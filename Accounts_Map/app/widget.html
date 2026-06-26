@@ -139,10 +139,11 @@ const FIELD_DEAL_DATE    = "Closing_Date";  // shown in the detail panel's deal 
 // Edit thresholds/colours freely; `label` is for a legend if you add one.
 const PIPELINE_BANDS = [
   { min: 0,      color:"#bdbdbd", label:"No open pipeline" },
-  { min: 1,      color:"#fdae6b", label:"Up to £50k" },
-  { min: 50000,  color:"#fd8d3c", label:"£50k – £150k" },
-  { min: 150000, color:"#e6550d", label:"£150k – £500k" },
-  { min: 500000, color:"#a63603", label:"£500k and over" },
+  { min: 1,      color:"#fdae6b", label:"Up to £10k" },
+  { min: 10000,  color:"#e79150", label:"£10k – £50k" },
+  { min: 50000, color:"#d27336", label:"£50k – £250k" },
+  { min: 250000, color:"#bc561d", label:"£250k - £1M" },
+  { min: 1000000, color:"#a63603", label:"Over £1M" },
 ];
 
 // ---- FILTER DEFINITIONS ---------------------------------------------
