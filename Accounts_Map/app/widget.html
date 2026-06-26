@@ -55,6 +55,10 @@
   .fg select{width:100%;padding:6px 8px;border:1px solid #cdd3df;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box}
   #reset{width:100%;margin-top:8px;padding:8px;border:1px solid #cdd3df;border-radius:6px;background:#eef1f7;font-weight:600;cursor:pointer}
   #reset:hover{background:#e2e7f1}
+  /* "Show more options" expander toggle. */
+  #more-toggle{width:100%;margin:2px 0 8px;padding:6px 0;border:none;background:none;color:#2a6fb0;font-weight:600;font-size:12px;cursor:pointer;text-align:left}
+  #more-toggle:hover{text-decoration:underline}
+  #adv-filters[hidden]{display:none}
   /* Map fills the remaining width. Needs an explicit height to render. */
   #map{flex:1;height:100%}
   /* Floating status/error box over the map (load progress, failures). */
@@ -120,15 +124,19 @@ const PIPELINE_BANDS = [
   { min: 250000, color:"#bc561d", label:"£250k - £1M" },
   { min: 1000000, color:"#a63603", label:"Over £1M" },
 ];
+
 // ---- FILTER DEFINITIONS ---------------------------------------------
 // Each object = one dropdown. "type" controls BOTH how the dropdown is
 // built (buildSidebar) and how it filters (matches). Four types:
 //   category : distinct values are read from the data at runtime
+//              (optional `order` array sorts them; otherwise alphabetical)
 //   range    : numeric value must fall inside a chosen band
 //   count    : exact-count buckets 0,1,2,3,4,5+ (5+ means >= 5)
 //   derived  : value is computed per-account by a derive() function
-// Range bands below are sensible defaults — edit min/max to taste.
+// `adv: true` puts a filter under the "Show more options" expander;
+// everything else shows by default. Range bands are editable defaults.
 const FILTERS = [
+  // -------- Basic filters (always visible) --------
   // "Active" isn't a stored field. It's computed: an account is Active
   // if it has at least one open deal (a deal that's neither won nor
   // lost), i.e. total deals minus the won and lost rollups is > 0.
@@ -139,34 +147,33 @@ const FILTERS = [
   { id:"f-industry", label:"Industry",        field:"Industry",       type:"category" },
   { id:"f-type",     label:"Account Type",    field:"Account_Type",   type:"category" },
 
-  // Currency: banded into ranges. max is exclusive (see matches()).
-  { id:"f-annrev",   label:"Annual Revenue",  field:"Annual_Revenue", type:"range", bands:[
-      {label:"< £100k", min:-Infinity, max:100000}, {label:"£100k – £500k", min:100000, max:500000},
-      {label:"£500k – £1M", min:500000, max:1000000}, {label:"£1M – £5M", min:1000000, max:5000000},
-      {label:"£5M+", min:5000000, max:Infinity} ] },
-
-  // Employee head-count bands.
-  // { id:"f-emp",      label:"Employees",       field:"Employees",      type:"range", bands:[
-  //     {label:"1 – 10", min:1, max:11}, {label:"11 – 50", min:11, max:51},
-  //     {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
-  //     {label:"500+", min:501, max:Infinity} ] },
-
-  // // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  // { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  // { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  // { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
-
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
       {label:"< £10k", min:-Infinity, max:10000}, {label:"£10k – £50k", min:10000, max:50000},
       {label:"£50k – £250k", min:50000, max:250000}, {label:"£250k – £1M", min:250000, max:1000000},
       {label:"£1M+", min:1000000, max:Infinity} ] },
 
-  // // Win/Loss percentage, banded 0–100.
-  // { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", bands:[
-  //     {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
-  //     {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
-  //     {label:"81 – 100%", min:81, max:Infinity} ] },
+  // -------- Advanced filters (under "Show more options") --------
+  // Account Strength picklist, ordered high -> low rather than alphabetical.
+  { id:"f-strength", label:"Account Strength", field:"Account_Strength", type:"category", adv:true,
+    order:["Very High","High","Moderate","Low","Very Low"] },
+
+  // Currency: banded into ranges. max is exclusive (see matches()).
+  { id:"f-annrev",   label:"Annual Revenue",  field:"Annual_Revenue", type:"range", adv:true, bands:[
+      {label:"< £100k", min:-Infinity, max:100000}, {label:"£100k – £500k", min:100000, max:500000},
+      {label:"£500k – £1M", min:500000, max:1000000}, {label:"£1M – £5M", min:1000000, max:5000000},
+      {label:"£5M+", min:5000000, max:Infinity} ] },
+
+  // Deal-count rollups: exact buckets. Empty/null counts as 0.
+  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count", adv:true },
+  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count", adv:true },
+  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count", adv:true },
+
+  // Win/Loss percentage, banded 0–100.
+  { id:"f-winloss",  label:"Win/Loss %",      field:"Win_Loss_Percentage", type:"range", adv:true, bands:[
+      {label:"0 – 20%", min:0, max:21}, {label:"21 – 40%", min:21, max:41},
+      {label:"41 – 60%", min:41, max:61}, {label:"61 – 80%", min:61, max:81},
+      {label:"81 – 100%", min:81, max:Infinity} ] },
 ];
 // =====================================================================
 // END CONFIG
@@ -230,35 +237,60 @@ function popupHtml(a){
 }
 
 // ---- Build the filter controls from the FILTERS array ---------------
-function buildSidebar(){
-  // For each filter, generate its <option>s based on type, then inject
-  // the <label> + <select> into the sidebar.
-  document.getElementById("filters").innerHTML = FILTERS.map(f => {
-    let opts = '<option value="">All</option>';                       // "" = no filter applied
-    if(f.type === "count")
-      opts += [0,1,2,3,4].map(n => `<option value="${n}">${n}</option>`).join("") + `<option value="5+">5+</option>`;
-    else if(f.type === "range")
-      opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join(""); // value = band index
-    else if(f.type === "derived")
-      opts += f.options.map(o => `<option value="${o}">${o}</option>`).join("");
-    // category options are added later by fillCategories() once data is loaded
-    return `<div class="fg"><label for="${f.id}">${f.label}</label><select id="${f.id}">${opts}</select></div>`;
-  }).join("");
+// Builds the <option>s for one filter and wraps it in a labelled group.
+function filterGroupHtml(f){
+  let opts = '<option value="">All</option>';                       // "" = no filter applied
+  if(f.type === "count")
+    opts += [0,1,2,3,4].map(n => `<option value="${n}">${n}</option>`).join("") + `<option value="5+">5+</option>`;
+  else if(f.type === "range")
+    opts += f.bands.map((b,i) => `<option value="${i}">${b.label}</option>`).join(""); // value = band index
+  else if(f.type === "derived")
+    opts += f.options.map(o => `<option value="${o}">${o}</option>`).join("");
+  // category options are added later by fillCategories() once data is loaded
+  return `<div class="fg"><label for="${f.id}">${f.label}</label><select id="${f.id}">${opts}</select></div>`;
+}
 
-  // Any dropdown change re-applies all filters. Reset clears them all.
+function buildSidebar(){
+  // Split filters into the always-visible basic set and the advanced set
+  // that lives behind the "Show more options" toggle.
+  const basic = FILTERS.filter(f => !f.adv).map(filterGroupHtml).join("");
+  const adv   = FILTERS.filter(f =>  f.adv).map(filterGroupHtml).join("");
+  document.getElementById("filters").innerHTML =
+    basic
+    + `<button type="button" id="more-toggle">Show more options ▾</button>`
+    + `<div id="adv-filters" hidden>${adv}</div>`;
+
+  // Any dropdown change re-applies all filters (advanced ones still apply
+  // even while collapsed — they just default to "All").
   FILTERS.forEach(f => document.getElementById(f.id).addEventListener("change", applyFilters));
+
+  // Expander toggle: show/hide the advanced group and flip the label.
+  const box = document.getElementById("adv-filters");
+  const btn = document.getElementById("more-toggle");
+  btn.addEventListener("click", () => {
+    box.hidden = !box.hidden;
+    btn.textContent = box.hidden ? "Show more options ▾" : "Show fewer options ▴";
+  });
+
+  // Reset clears every filter (basic + advanced).
   document.getElementById("reset").addEventListener("click", () => {
     FILTERS.forEach(f => document.getElementById(f.id).value = "");
     applyFilters();
   });
 }
 
-// Populate the category dropdowns (Industry, Account Type) with the
-// distinct values actually present in the data, sorted. This is why
-// those lists always match reality without being hardcoded.
+// Populate the category dropdowns (Industry, Account Type, Account
+// Strength) with the distinct values present in the data. A filter with
+// an `order` array is sorted by that order (unknown values last);
+// otherwise alphabetically. This is why those lists always match reality
+// without being hardcoded.
 function fillCategories(accounts){
   FILTERS.filter(f => f.type === "category").forEach(f => {
-    const vals = [...new Set(accounts.map(a => String(a[f.field]==null?"":a[f.field]).trim()).filter(Boolean))].sort();
+    const vals = [...new Set(accounts.map(a => String(a[f.field]==null?"":a[f.field]).trim()).filter(Boolean))];
+    if(f.order)
+      vals.sort((a,b) => ((f.order.indexOf(a)+1 || 1e9) - (f.order.indexOf(b)+1 || 1e9)) || a.localeCompare(b));
+    else
+      vals.sort();
     document.getElementById(f.id).insertAdjacentHTML("beforeend",
       vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(""));
   });
