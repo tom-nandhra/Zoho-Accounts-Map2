@@ -120,7 +120,6 @@ const PIPELINE_BANDS = [
   { min: 250000, color:"#bc561d", label:"£250k - £1M" },
   { min: 1000000, color:"#a63603", label:"Over £1M" },
 ];
-
 // ---- FILTER DEFINITIONS ---------------------------------------------
 // Each object = one dropdown. "type" controls BOTH how the dropdown is
 // built (buildSidebar) and how it filters (matches). Four types:
@@ -152,10 +151,10 @@ const FILTERS = [
       {label:"51 – 200", min:51, max:201}, {label:"201 – 500", min:201, max:501},
       {label:"500+", min:501, max:Infinity} ] },
 
-  // // Deal-count rollups: exact buckets. Empty/null counts as 0.
-  // { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
-  // { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
-  // { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
+  // Deal-count rollups: exact buckets. Empty/null counts as 0.
+  { id:"f-deals",    label:"Total Deals",     field:"Total_Deals",     type:"count" },
+  { id:"f-won",      label:"Total Deals Won", field:"Total_Deals_WON", type:"count" },
+  { id:"f-lost",     label:"Total Deals Lost",field:"Total_Deals_LOST",type:"count" },
 
   // Won-revenue rollup, banded.
   { id:"f-business", label:"Total Business",  field:"Total_Business",  type:"range", bands:[
@@ -209,13 +208,18 @@ function pinIcon(color){
   return L.divIcon({ html: svg, className: "", iconSize:[24,36], iconAnchor:[12,36], popupAnchor:[0,-36] });
 }
 
+// Join an account's present billing-address parts into one string,
+// in order, skipping blanks. Returns "" if there's no address at all.
+function addressStr(a){
+  return FIELD_ADDRESS.map(f => a[f]).filter(v => v != null && String(v).trim() !== "").map(esc).join(", ");
+}
+
 // Build the popup HTML for one account. Only adds a row if the field has
 // a value, so empty fields don't show blank lines.
 function popupHtml(a){
   const rows = [];
   // Billing address: present parts only, joined in order under the title.
-  const parts = FIELD_ADDRESS.map(f => a[f]).filter(v => v != null && String(v).trim() !== "");
-  const addr = parts.length ? `<div class="addr">${parts.map(esc).join(", ")}</div>` : "";
+  const addr = addressStr(a) ? `<div class="addr">${addressStr(a)}</div>` : "";
   // Open pipeline drives the pin colour, so show it in the popup too.
   rows.push(`<div>Open Pipeline: <b>${fmtMoney(a._openPipeline || 0)}</b></div>`);
   if (a[FIELD_REVENUE] != null && a[FIELD_REVENUE] !== "")
@@ -352,8 +356,13 @@ function renderMarkers(accounts){
   markerLayer.clearLayers();
   accounts.forEach(a=>{
     const pos=getPos(a); if(!pos) return;
-    L.marker([pos.lat,pos.lng],{icon:pinIcon(colorForPipeline(a._openPipeline)),title:a[FIELD_NAME]||""})
-      .bindPopup(popupHtml(a)).addTo(markerLayer);
+    const m = L.marker([pos.lat,pos.lng],{icon:pinIcon(colorForPipeline(a._openPipeline))});
+    // Hover tooltip: account name, plus the full billing address if present.
+    const addr = addressStr(a);
+    m.bindTooltip(`<b>${esc(a[FIELD_NAME])}</b>${addr ? `<br>${addr}` : ""}`,
+      { direction:"top", offset:[0,-34], opacity:0.95 });
+    // Click still opens the fuller popup (pipeline, revenue, win/loss…).
+    m.bindPopup(popupHtml(a)).addTo(markerLayer);
   });
 }
 
