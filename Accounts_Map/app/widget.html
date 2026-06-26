@@ -85,6 +85,8 @@
   .d-deal-amt{flex-shrink:0;background:#e9f2fb;color:#1c5fa8;border-radius:6px;padding:1px 8px;font-weight:600;font-size:12px}
   .d-deal-sub{color:#7a838f;font-size:12px;margin-top:2px}
   .d-empty{color:#9aa1ab;font-style:italic}
+  .d-link{color:#2a6fb0;cursor:pointer}
+  .d-link:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -271,7 +273,7 @@ function dealsHtml(deals){
   return deals.slice().sort((x,y)=>String(y.date||"").localeCompare(String(x.date||""))).map(d => `
     <div class="d-deal">
       <div class="d-deal-top">
-        <span class="d-deal-name">${esc(d.name)}</span>
+        <span class="d-deal-name">${ d.id ? `<span class="d-link" data-entity="Deals" data-id="${esc(d.id)}">${esc(d.name)}</span>` : esc(d.name) }</span>
         <span class="d-deal-amt">${fmtMoney(d.amount)}</span>
       </div>
       <div class="d-deal-sub">${txt(d.stage)}${d.date ? ` · ${fmtDate(d.date)}` : ""}</div>
@@ -285,7 +287,7 @@ function buildDetail(a){
     ? `<span class="d-pill">${esc(a.Account_Strength)}</span>` : "—";
   return `
     <div class="d-head">
-      <h3>${esc(a[FIELD_NAME])}</h3>
+      <h3>${ a.id ? `<span class="d-link" data-entity="Accounts" data-id="${esc(a.id)}">${esc(a[FIELD_NAME])}</span>` : esc(a[FIELD_NAME]) }</h3>
       <button class="d-close" id="d-close" title="Close">×</button>
     </div>
     <div class="d-sec">
@@ -324,6 +326,11 @@ function openDetail(a){
   el.innerHTML = buildDetail(a);
   el.hidden = false;
   document.getElementById("d-close").addEventListener("click", closeDetail);
+  // Account-name and deal-name links open the record inside the CRM.
+  el.querySelectorAll(".d-link").forEach(node => node.addEventListener("click", () => {
+    ZOHO.CRM.UI.Record.open({ Entity: node.dataset.entity, RecordID: node.dataset.id })
+      .catch(e => console.warn("Record.open failed", e));
+  }));
   setTimeout(() => map.invalidateSize(), 210);
 }
 function closeDetail(){
@@ -483,7 +490,7 @@ async function fetchDealsByAccount(){
       const m = map[id] || (map[id] = { openPipeline:0, deals:[] });
       const stage = d[FIELD_DEAL_STAGE];
       const amount = Number(d[FIELD_DEAL_AMOUNT]) || 0;
-      m.deals.push({ name:d[FIELD_DEAL_NAME], stage, amount, date:d[FIELD_DEAL_DATE] });
+      m.deals.push({ id:d.id, name:d[FIELD_DEAL_NAME], stage, amount, date:d[FIELD_DEAL_DATE] });
       if(!CLOSED_STAGES.includes(stage)) m.openPipeline += amount;   // open deals only
     });
     if(rows.length<200) break; page++;
