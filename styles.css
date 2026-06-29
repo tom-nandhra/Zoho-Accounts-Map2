@@ -1,0 +1,46 @@
+/* Full-height app: a flex row of [fixed sidebar | flexible map]. */
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,sans-serif}
+  .wrap{display:flex;height:100%}
+  /* Sidebar: fixed width, scrolls independently if filters overflow. */
+  .sidebar{width:300px;flex-shrink:0;background:#f7f8fa;border-right:1px solid #e2e6ee;overflow-y:auto;padding:16px;box-sizing:border-box}
+  .sidebar h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#444;margin:0 0 4px}
+  .count{font-size:12px;color:#555;margin:0 0 14px}
+  .count b{color:#1a1a2e}
+  /* One filter group = label + dropdown. */
+  .fg{margin-bottom:10px}
+  .fg label{display:block;font-size:11px;font-weight:600;color:#666;margin-bottom:3px}
+  .fg select{width:100%;padding:6px 8px;border:1px solid #cdd3df;border-radius:6px;font-size:13px;background:#fff;box-sizing:border-box}
+  #reset{width:100%;margin-top:8px;padding:8px;border:1px solid #cdd3df;border-radius:6px;background:#eef1f7;font-weight:600;cursor:pointer}
+  #reset:hover{background:#e2e7f1}
+  /* "Show more options" expander toggle. */
+  #more-toggle{width:100%;margin:2px 0 8px;padding:6px 0;border:none;background:none;color:#555;font-weight:600;font-size:12px;cursor:pointer;text-align:left}
+  #more-toggle:hover{text-decoration:underline}
+  #adv-filters[hidden]{display:none}
+  /* Map fills the remaining width. Needs an explicit height to render. */
+  #map{flex:1;height:100%}
+  /* Floating status/error box over the map (load progress, failures). */
+  #status{position:absolute;top:8px;left:316px;z-index:1000;background:#fff;border:1px solid #ccc;border-radius:6px;padding:6px 10px;font-size:13px;max-width:60vw}
+  #status.err{background:#fdecea;border-color:#c62828;color:#7a1c1c}
+  /* Hover tooltip uses Leaflet's default styling. */
+  /* Right-hand detail panel (opens when a pin is clicked). */
+  #detail{width:340px;flex-shrink:0;background:#fff;border-left:1px solid #e2e6ee;overflow-y:auto;box-sizing:border-box;font-size:13px}
+  #detail[hidden]{display:none}
+  .d-head{position:sticky;top:0;background:#fff;border-bottom:1px solid #eef0f4;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .d-head h3{margin:0;font-size:15px;color:#1a1a2e;line-height:1.3}
+  .d-close{border:none;background:none;font-size:20px;line-height:1;cursor:pointer;color:#9aa1ab;padding:0}
+  .d-close:hover{color:#333}
+  .d-sec{padding:14px 16px;border-bottom:1px solid #f2f4f7}
+  .d-sec h4{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#5a6472}
+  .d-row{display:flex;justify-content:space-between;gap:12px;margin:6px 0}
+  .d-k{color:#7a838f;flex-shrink:0}
+  .d-v{color:#1a1a2e;text-align:right;font-weight:500;word-break:break-word}
+  .d-pill{display:inline-block;padding:2px 10px;border-radius:12px;background:#f3954d;color:#fff;font-weight:600;font-size:12px}
+  .d-deal{padding:8px 0;border-bottom:1px solid #f4f6f8}
+  .d-deal:last-child{border-bottom:none}
+  .d-deal-top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .d-deal-name{font-weight:600;color:#1a1a2e}
+  .d-deal-amt{flex-shrink:0;background:#e9f2fb;color:#1c5fa8;border-radius:6px;padding:1px 8px;font-weight:600;font-size:12px}
+  .d-deal-sub{color:#7a838f;font-size:12px;margin-top:2px}
+  .d-empty{color:#9aa1ab;font-style:italic}
+  .d-link{color:#1a1a2e;cursor:pointer}
+  .d-link:hover{text-decoration:underline}

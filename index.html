@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Account map</title>
+
+<!--
+  ===================================================================
+  ZOHO CRM ACCOUNT MAP  —  Leaflet widget (externally hosted)
+  ===================================================================
+  WHAT THIS IS:
+    A widget that plots Account records from Zoho CRM on a map, coloured
+    by open-pipeline value, with a sidebar of filters. It is hosted
+    outside Zoho (e.g. GitHub Pages) and registered as a CRM Widget; the
+    Zoho JS SDK lets it read CRM data live, inheriting the logged-in
+    user's session (so no API key and no data sits in these files).
+
+  FILES:
+    index-leaflet.html  - this file: page structure + library/asset tags
+    styles.css          - all styling
+    app.js              - all logic (config, filters, map, fetch, panel)
+
+  HOW IT FLOWS (source order is NOT execution order):
+    1. The <link>/<script> tags load Leaflet, the Zoho SDK, the
+       stylesheet, then app.js.
+    2. Nothing meaningful runs until ZOHO.embeddedApp.init() (end of
+       app.js) completes the handshake with Zoho and fires "PageLoad".
+    3. Inside PageLoad: build sidebar -> fetch accounts/deals/contacts ->
+       filter+draw -> zoom to fit.
+    4. After that it's reactive: changing any dropdown re-runs the
+       filter and redraws the pins.
+
+  THE ONE CLEVER BIT:
+    The FILTERS array is declarative. Each entry's "type" decides both
+    how its dropdown is built AND how it matches. So adding a filter is
+    a data change, not new UI code.
+  ===================================================================
+-->
+
+<!-- Leaflet: the open-source map library (CSS first, then JS). -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Zoho Embedded App SDK: the bridge that lets this externally-hosted
+     page read/write the CRM it is embedded in. Exposes the global ZOHO. -->
+<script src="https://live.zwidgets.com/js-sdk/1.0.5/ZohoEmbededAppSDK.min.js"></script>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- Layout skeleton. #filters is filled in by JS from the FILTERS array;
+     it is deliberately empty here. -->
+<div class="wrap">
+  <div class="sidebar">
+    <h2>Filters</h2>
+    <div class="count">Showing <b id="count">0</b> accounts</div>
+    <div id="filters"></div>
+    <button id="reset">Reset filters</button>
+  </div>
+  <div id="map"></div>
+  <aside id="detail" hidden></aside>
+</div>
+<div id="status">Starting…</div>
+
+<script src="app.js"></script>
+</body>
+</html>
